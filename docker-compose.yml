@@ -14,6 +14,10 @@ volumes:
     driver: local
   fleetserverdata:
     driver: local
+  vault-data:
+    driver: local
+  vault-keys:
+    driver: local
 
 networks:
   default:
@@ -81,6 +85,37 @@ services:
       interval: 1s
       timeout: 5s
       retries: 120
+
+  vault:
+    image: vault:1.14.3
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_API_ADDR: "http://localhost:8200"
+    volumes:
+      - vault-data:/vault/file
+      - ./vault/config:/vault/config:ro
+      - ./vault/keys:/vault/keys
+    command: "server -config=/vault/config/vault.hcl"
+    healthcheck:
+      test: ["CMD", "vault", "status", "-format=json"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  vault-init:
+    image: vault:1.14.3
+    depends_on:
+      vault:
+        condition: service_started
+    volumes:
+      - vault-keys:/vault/keys
+      - ./vault/init:/vault/init:ro
+    entrypoint: ["/vault/init/init.sh"]
+    environment:
+      VAULT_ADDR: "http://vault:8200"
+    restart: "no"
 
   es01:
     depends_on:
