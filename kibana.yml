@@ -5,41 +5,6 @@ elastic:
     secretToken: ${ELASTIC_APM_SECRET_TOKEN}
 server.host: "0.0.0.0"
 telemetry.enabled: "true"
-# NOTE: ssl.certificate_authorities pins the CA generated into the `certs` volume by the
-# `setup` service. es01's cert doesn't present its issuing chain, so ca_trusted_fingerprint
-# fails validation (x509: certificate signed by unknown authority) - inline PEM is required
-# instead. If the `certs` volume is ever recreated, regenerate this from the new CA:
-#   docker run --rm -v <project>_certs:/certs alpine cat /certs/ca/ca.crt
-xpack.fleet.outputs:
-  - id: fleet-default-output
-    name: default
-    type: elasticsearch
-    hosts: ["https://es01:9200"]
-    is_default: true
-    is_default_monitoring: true
-    ssl:
-      certificate_authorities:
-        - |
-          -----BEGIN CERTIFICATE-----
-          MIIDWTCCAkGgAwIBAgIUUOq9YdxiWM4038Z4/TwlcMRMSzowDQYJKoZIhvcNAQEL
-          BQAwNDEyMDAGA1UEAxMpRWxhc3RpYyBDZXJ0aWZpY2F0ZSBUb29sIEF1dG9nZW5l
-          cmF0ZWQgQ0EwHhcNMjYwNzI2MjI0ODU2WhcNMjkwNzI1MjI0ODU2WjA0MTIwMAYD
-          VQQDEylFbGFzdGljIENlcnRpZmljYXRlIFRvb2wgQXV0b2dlbmVyYXRlZCBDQTCC
-          ASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALS+uA1GD3FGbZvjMUShLOw1
-          K8Gu8Bx0aztE84gIhtkyGo26bRFYWZpyHcy8nL2EOwK8K0okQmJrN6o9tNKw1Sls
-          JSsxUxhR1ibL6Ou5yboWSSH9IE5Q8xKasH/BlzMBczLCR5ZbW/Va/KBfGPY5Dhu2
-          7DwuiAJ5yJXTUjOulkGRpTErjGdmJ7kizcnSmnNNy2qHmUTbly0+jj++wST91dtn
-          9EksVCvFkDBENARGZcACK5/0aTdGoszG1ko+O9sK33zVt2R7eFfPtIGUfCrJwmjY
-          Ru/2sFpP/eSnd8i2fg1YCr0usOYNVy9Csj/yJZdaMEcFF8r8UtwG1QeYZXBawZMC
-          AwEAAaNjMGEwHQYDVR0OBBYEFBbm64M7xjklX8edzvmsZuX/I5juMB8GA1UdIwQY
-          MBaAFBbm64M7xjklX8edzvmsZuX/I5juMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0P
-          AQH/BAQDAgEGMA0GCSqGSIb3DQEBCwUAA4IBAQCj8yF80l6fMdPvYAYiupz9GAWp
-          hFY7hk2pIIE2O2x8ghMn4tza4qs7FJ+N6mESmFEIUZNP2s7IHNSrOhaK6smapVFu
-          Tcw3zfVjnovXA0LyqMJYPAb/6xL/v8etRSxh804UNQTFfubTCAqvzUOr2pQ5jfuy
-          lEyAiFHIMDTMLCgL+6ZsAk1RAzrAraPbN41rEGb4fxlitE1B4WK+vE7lxmqAgIdV
-          WKwDrcEACqlZLuqY0VChsEpUo6o0bU/d7m3p6v7BRyvuCfQiV5qccz4hHeVCwMJw
-          ZQXdIA5RHxifBNseXEu/9kOSgdYUkKe0jyRAmaPsU4BMdzwCN691BTc2tdxI
-          -----END CERTIFICATE-----
 xpack.fleet.packages:
   - name: fleet_server
     version: latest

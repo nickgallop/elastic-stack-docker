@@ -227,6 +227,45 @@ compose_up() {
   docker compose up -d
 }
 
+wait_for_kibana() {
+  echo "Waiting for Kibana to become healthy..."
+  cid=$(docker compose ps -q kibana)
+  while :; do
+    health=$(docker inspect --format='{{.State.Health.Status}}' "$cid" 2>/dev/null || echo "")
+    [ "$health" = "healthy" ] && return 0
+    sleep 2
+  done
+}
+
+sync_fleet_output_ca() {
+  # The `certs` volume's CA is regenerated whenever it's recreated (e.g. `docker compose
+  # down -v`), which would otherwise silently break fleet-server's TLS trust of es01 without
+  # any config drift being obvious. Read the CA straight from es01's mount and push it into
+  # Fleet's default output on every `up`, so the trusted CA is always the one actually in use.
+  echo "Syncing Fleet output CA with the current certs volume..."
+  ca_pem=$(docker compose exec -T es01 cat config/certs/ca/ca.crt)
+  ca_escaped=$(printf '%s' "$ca_pem" | awk '{printf "%s\\n", $0}')
+
+  attempt=0
+  http_code=""
+  while [ "$attempt" -lt 10 ]; do
+    http_code=$(docker compose exec -T kibana curl -s -o /dev/null -w '%{http_code}' \
+      --cacert config/certs/ca/ca.crt \
+      -u "elastic:${elastic_password}" \
+      -X PUT "https://localhost:5601/api/fleet/outputs/fleet-default-output" \
+      -H 'kbn-xsrf: true' -H 'Content-Type: application/json' \
+      -d "{\"name\":\"default\",\"type\":\"elasticsearch\",\"hosts\":[\"https://es01:9200\"],\"is_default\":true,\"is_default_monitoring\":true,\"ca_trusted_fingerprint\":null,\"ssl\":{\"certificate_authorities\":[\"$ca_escaped\"]}}")
+    if [ "$http_code" = "200" ]; then
+      echo "Fleet output CA synced."
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 3
+  done
+
+  echo "Warning: could not sync Fleet output CA (last HTTP status: $http_code). Fleet may still be setting up - re-run '$0 up' once it settles." >&2
+}
+
 show_secret() {
   run_vault kv get "$VAULT_SECRET_PATH"
 }
@@ -254,6 +293,8 @@ main() {
       export_vault_auth
       ensure_elastic_secret
       compose_up
+      wait_for_kibana
+      sync_fleet_output_ca
       ;;
     show)
       cd "$COMPOSE_DIR"
