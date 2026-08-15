@@ -266,6 +266,66 @@ sync_fleet_output_ca() {
   echo "Warning: could not sync Fleet output CA (last HTTP status: $http_code). Fleet may still be setting up - re-run '$0 up' once it settles." >&2
 }
 
+deploy_custom_apm_pipeline() {
+  echo "Deploying custom traces-apm ingest pipeline..."
+
+  pipeline_json=$(cat <<'EOF'
+{
+  "description": "Custom enrichment for traces-apm-*: request format, span volume/complexity classification.",
+  "processors": [
+    {
+      "dissect": {
+        "if": "ctx.transaction?.name != null && ctx.transaction.name.contains('/noisy/')",
+        "field": "transaction.name",
+        "pattern": "%{}/noisy/%{labels.request_format}",
+        "ignore_failure": true
+      }
+    },
+    {
+      "script": {
+        "if": "ctx.transaction?.span_count?.started != null",
+        "source": "def started = ctx.transaction.span_count.started; def class = started >= 100 ? 'high' : (started >= 20 ? 'medium' : 'low'); if (ctx.labels == null) { ctx.labels = [:]; } ctx.labels.span_volume_class = class;"
+      }
+    },
+    {
+      "script": {
+        "if": "ctx.numeric_labels?.node_count != null",
+        "source": "def nodes = ctx.numeric_labels.node_count; def complexity = nodes >= 500 ? 'high' : (nodes >= 50 ? 'medium' : 'low'); if (ctx.labels == null) { ctx.labels = [:]; } ctx.labels.node_complexity = complexity;"
+      }
+    }
+  ],
+  "on_failure": [
+    {
+      "set": {
+        "field": "labels.pipeline_error",
+        "value": "{{_ingest.on_failure_message}}"
+      }
+    }
+  ]
+}
+EOF
+  )
+
+  attempt=0
+  response=""
+  while [ "$attempt" -lt 10 ]; do
+    response=$(docker compose exec -T es01 curl -s \
+      --cacert config/certs/ca/ca.crt \
+      -u "elastic:${elastic_password}" \
+      -X PUT "https://localhost:9200/_ingest/pipeline/traces-apm@custom" \
+      -H 'Content-Type: application/json' \
+      -d "$pipeline_json")
+    if printf '%s' "$response" | grep -q '"acknowledged":true'; then
+      echo "Custom traces-apm ingest pipeline synced."
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 3
+  done
+
+  echo "Warning: could not sync custom traces-apm ingest pipeline (last response: $response). The apm package may still be installing - re-run '$0 up' once it settles." >&2
+}
+
 show_secret() {
   run_vault kv get "$VAULT_SECRET_PATH"
 }
@@ -295,6 +355,7 @@ main() {
       compose_up
       wait_for_kibana
       sync_fleet_output_ca
+      deploy_custom_apm_pipeline
       ;;
     show)
       cd "$COMPOSE_DIR"

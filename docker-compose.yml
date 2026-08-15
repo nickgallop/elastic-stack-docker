@@ -228,3 +228,9 @@ services:
       - "/:/hostfs:ro"
     ports:
       - 8000:8000
+
+  noisy-app:
+    build:
+      context: app-noisy
+    ports:
+      - 8001:8000
